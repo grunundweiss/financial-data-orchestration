@@ -1,0 +1,22 @@
+# dbt_project/models/schema.yml
+version: 2
+
+models:
+  - name: stg_transactions
+    description: "Cleansed intermediate transactional data with risk profiles applied."
+    columns:
+      - name: transaction_id
+        tests:
+          - unique
+          - not_null
+      - name: amount
+        tests:
+          - not_null
+
+  - name: fct_account_risk_metrics
+    description: "Aggregated high-value exposure and net balances per account."
+    columns:
+      - name: account_id
+        tests:
+          - unique
+          - not_null

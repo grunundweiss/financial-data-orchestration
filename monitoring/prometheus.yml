@@ -1,0 +1,13 @@
+# monitoring/prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'airflow_pipeline_metrics'
+    static_configs:
+      - targets: ['host.docker.internal:8125'] # Points to Airflow statsd metrics
+
+  - job_name: 'prometheus_self_monitoring'
+    static_configs:
+      - targets: ['localhost:9090']

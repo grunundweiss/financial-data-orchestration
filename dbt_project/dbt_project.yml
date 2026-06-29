@@ -1,0 +1,19 @@
+# dbt_project/dbt_project.yml
+name: 'financial_data_platform'
+version: '1.0.0'
+config-version: 2
+
+profile: 'duckdb_profile'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  financial_data_platform:
+    staging:
+      +materialized: view
+      +schema: silver
+    intermediate:
+      +materialized: table
+      +schema: gold
