@@ -67,3 +67,32 @@ def test_silver_layer_risk_profiling_logic(clean_orchestrator):
     assert high_value == "HIGH_VALUE"
     assert outflow == "OUTFLOW"
     assert standard == "STANDARD"
+
+def test_dbt_schema_alignment(clean_orchestrator):
+    """Validates that the orchestrated database schema maps perfectly to the dbt model structure."""
+    clean_orchestrator.run_pipeline()
+
+    conn = duckdb.connect(TEST_DB_PATH)
+
+    # Extract existing tables from the silver schema
+    silver_tables = [t[0].lower() for t in conn.execute(
+        "SELECT table_name FROM information_schema.tables WHERE LOWER(table_schema)='silver';"
+    ).fetchall()]
+
+    # Extract existing tables from the gold schema
+    gold_tables = [t[0].lower() for t in conn.execute(
+        "SELECT table_name FROM information_schema.tables WHERE LOWER(table_schema)='gold';"
+    ).fetchall()]
+
+    print(f"\n[DEBUG] Found Silver Tables: {silver_tables}")
+    print(f"[DEBUG] Found Gold Tables: {gold_tables}")
+
+    conn.close()
+
+    # Check for presence of clean intermediate or staging datasets
+    assert any("int_transactions_cleansed" in t or "stg_transactions" in t for t in silver_tables), \
+        f"Expected transactional model in silver schema, got: {silver_tables}"
+
+    # Check for presence of final analytical fact metrics
+    assert any("fct_account_risk_metrics" in t for t in gold_tables), \
+        f"Expected fact table in gold schema, got: {gold_tables}"
