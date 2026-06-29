@@ -1,13 +1,14 @@
 # Automated Financial Data Orchestration & Observability Platform
 
-A production-grade transactional data pipeline implementing scheduled ingestion, multi-layered data modeling, and automated data quality validation gates. The platform uses DuckDB as an embedded high-performance analytical engine to execute structured data warehouse transformation strategies locally and instantly.
+A production-grade transactional data pipeline implementing scheduled ingestion, multi-layered data modeling via dbt, and automated data quality validation gates. The platform uses DuckDB as an embedded analytical engine alongside a Dockerized SRE observability stack to monitor execution health and data integrity.
 
-## Architectural Data Matrix
+## Architectural Data & Observability Matrix
 
-The platform orchestrates a three-tier medallion data model architecture to ensure separation of concerns and optimal analytical query execution:
-* **Bronze Layer (`bronze.stg_transactions`):** Low-latency data landing tier that ingests raw transaction streams without structural mutations.
-* **Silver Layer (`silver.int_transactions_cleansed`):** Intermediate transformation tier executing data cleaning, transaction classification logic, and risk profiling.
-* **Gold Layer (`gold.fct_account_risk_metrics`):** Highly aggregated analytical fact layer tracking high-value exposure counts and rolling balances per account.
+The platform orchestrates a three-tier medallion data model architecture alongside an infrastructure monitoring mesh:
+* **Bronze Layer (`bronze.stg_transactions`):** Ingests raw transaction streams (simulating a live daily banking feed in NOK) without structural mutations.
+* **Silver Layer (`dbt_project/models/staging/stg_transactions.sql`):** Intermediate dbt view executing data cleaning, risk profile classification logic, and structural validations.
+* **Gold Layer (`dbt_project/models/intermediate/fct_account_risk_metrics.sql`):** Highly aggregated analytical fact table tracking high-value exposure counts and rolling balances per account.
+* **Observability Tier (`monitoring/`):** Dedicated Prometheus scraping instance paired with Grafana dashboard services to track data flow metrics, assertion pass rates, and processing latency boundaries.
 
 ---
 
@@ -15,6 +16,7 @@ The platform orchestrates a three-tier medallion data model architecture to ensu
 
 ### Prerequisites
 * Python 3.12+
+* Docker & Docker Compose
 * Git
 
 ### Installation & Local Setup
@@ -38,19 +40,27 @@ The platform orchestrates a three-tier medallion data model architecture to ensu
 
 ---
 
-## Running the Platform
+## Running and Testing the Platform
 
-### 1. Execute the Data Pipeline Orchestrator
-To manually trigger the master workflow sequence (Ingestion $\rightarrow$ Data Modeling Transformations $\rightarrow$ Quality Auditing):
+### 1. Execute the Data Pipeline
+To manually trigger the master orchestrator sequence (Ingestion $\rightarrow$ dbt Data Modeling Transformations $\rightarrow$ Quality Auditing):
 ```bash
 python airflow/dags/transaction_pipeline.py
 ```
 
 ### 2. Run Automated Verification Tests
-The repository runs a strict testing matrix using Pytest to validate data types, edge-case conditions, and conditional data routing rules:
+The repository runs an isolated test suite using Pytest to validate data types, risk boundary logic, and database catalog compliance across schemas:
 ```bash
-pytest -v
+pytest -v -s
 ```
+
+### 3. Launch the Monitoring Infrastructure
+To spin up the Prometheus and Grafana containers in the background:
+```bash
+docker compose up -d
+```
+* **Prometheus Gateway:** Accessible locally at `http://localhost:9090`
+* **Grafana Dashboard Engine:** Accessible locally at `http://localhost:3000` (Default credentials: `admin` / `secure_admin_pass`)
 
 ---
 
