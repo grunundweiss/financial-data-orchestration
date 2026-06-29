@@ -1,0 +1,24 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Apache Airflow exclusions
+airflow/logs/
+airflow/airflow-webserver.pid
+airflow/unittests.cfg
+
+# dbt (Data Build Tool) exclusions
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/logs/
+
+# Local databases and caches
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
