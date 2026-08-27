@@ -1,0 +1,40 @@
+[project]
+name = "financial-data-orchestration"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "cryptography==49.0.0",
+    "duckdb==1.5.4",
+    "dbt-core==1.12.3",
+    "dbt-duckdb==1.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# No importable package lives at the repo root (DAG tasks are picked up by
+# Airflow via the mounted dags folder, not via installation) - this project
+# only needs its metadata and dependencies installed.
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Lets `pipeline_tasks` import cleanly in tests without sys.path hacks; this
+# mirrors how Airflow itself finds the module, via the dags folder being on
+# the path, not via package installation.
+pythonpath = ["airflow/dags"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint.isort]
+known-first-party = ["pipeline_tasks"]
+
+[tool.mypy]
+python_version = "3.14"
+ignore_missing_imports = true

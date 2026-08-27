@@ -1,0 +1,33 @@
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# Local Airflow/DuckDB volume data
+data/
+airflow/config/
+airflow/plugins/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Apache Airflow exclusions
+airflow/logs/
+airflow/airflow-webserver.pid
+airflow/unittests.cfg
+
+# dbt (Data Build Tool) exclusions
+dbt_project/target/
+dbt_project/dbt_packages/
+dbt_project/package-lock.yml
+dbt_project/logs/
+dbt_project/.user.yml
+
+# Local databases and caches
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/

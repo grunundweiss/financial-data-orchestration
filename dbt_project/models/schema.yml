@@ -1,0 +1,66 @@
+# dbt_project/models/schema.yml
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      - name: raw_transactions
+        loaded_at_field: timestamp
+        freshness:
+          warn_after: { count: 26, period: hour }
+          error_after: { count: 50, period: hour }
+
+models:
+  - name: stg_transactions
+    description: "Cleansed transactional data with risk profiles applied. Excludes rows with no transaction_id - see stg_transactions_rejects for what was dropped."
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: 1
+    columns:
+      - name: transaction_id
+        data_tests:
+          - unique
+          - not_null
+      - name: amount
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -1000000
+                max_value: 1000000
+      - name: currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["NOK", "EUR", "USD"]
+      - name: transaction_risk_profile
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["HIGH_VALUE", "OUTFLOW", "STANDARD"]
+
+  - name: stg_transactions_rejects
+    description: "Quarantine table: raw_transactions rows dropped by stg_transactions for having no transaction_id, kept so the loss is counted rather than silent."
+
+  - name: fct_account_risk_metrics
+    description: "Daily aggregated high-value exposure and net balance per account (one row per account per batch_date)."
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: 1
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [account_id, batch_date]
+    columns:
+      - name: account_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_transactions')
+                field: account_id
+      - name: batch_date
+        data_tests:
+          - not_null

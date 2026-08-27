@@ -1,0 +1,49 @@
+# monitoring/statsd-mapping.yml
+#
+# Without a mapping, statsd-exporter turns Airflow's dotted metric names into
+# one Prometheus metric per dag/task (airflow_dagrun_duration_success_transaction_pipeline,
+# ...), which can't be grouped or filtered in Grafana. These rules pull dag_id
+# and task_id out into labels instead, so the dashboard queries stay stable as
+# DAGs are added.
+mappings:
+  - match: "airflow.dagrun.duration.success.*"
+    name: "airflow_dagrun_duration_success"
+    labels:
+      dag_id: "$1"
+
+  - match: "airflow.dagrun.duration.failed.*"
+    name: "airflow_dagrun_duration_failed"
+    labels:
+      dag_id: "$1"
+
+  - match: "airflow.dagrun.schedule_delay.*"
+    name: "airflow_dagrun_schedule_delay"
+    labels:
+      dag_id: "$1"
+
+  - match: "airflow.ti.finish.*.*.*"
+    name: "airflow_task_instance_finished"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+      state: "$3"
+
+  - match: "airflow.ti.start.*.*"
+    name: "airflow_task_instance_started"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  - match: "airflow.dag.*.*.duration"
+    name: "airflow_task_duration"
+    labels:
+      dag_id: "$1"
+      task_id: "$2"
+
+  # Emitted by the ingest_raw_data task (see airflow/dags/transaction_pipeline.py).
+  - match: "airflow.rows_ingested"
+    name: "airflow_rows_ingested"
+
+# Rules are first-match-wins. Anything not matched above (scheduler heartbeat,
+# pool metrics, executor stats) still passes through under statsd-exporter's
+# default naming - no catch-all drop rule, so nothing is lost silently.

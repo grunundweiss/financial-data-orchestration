@@ -1,0 +1,7 @@
+duckdb_profile:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'analytics_platform.db') }}"
+      schema: main

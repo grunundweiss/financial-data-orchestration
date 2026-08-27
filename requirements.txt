@@ -1,0 +1,16 @@
+# On Python 3.14, run this after `pip install -r requirements.txt`:
+#   pip install --no-deps mashumaro==3.17
+# dbt-core pins mashumaro<3.15, but every version in that range fails to import
+# on Python 3.14 (mashumaro.exceptions.UnserializableField on JSONObjectSchema).
+# mashumaro 3.17 fixes it and is functionally compatible with dbt-core 1.11.x;
+# --no-deps is required because pip's resolver won't install it in one pass
+# alongside dbt-core's own (stale) upper bound. Not needed on Python <=3.13.
+cryptography==49.0.0
+duckdb==1.5.4
+dbt-core==1.11.12
+dbt-duckdb==1.10.1
+iniconfig==2.3.0
+packaging==26.2
+pluggy==1.6.0
+Pygments==2.20.0
+pytest==9.1.1
