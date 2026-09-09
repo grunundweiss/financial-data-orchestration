@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "pyyaml>=6.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -27,13 +27,13 @@ testpaths = ["tests"]
 # Lets `pipeline_tasks` import cleanly in tests without sys.path hacks; this
 # mirrors how Airflow itself finds the module, via the dags folder being on
 # the path, not via package installation.
-pythonpath = ["airflow/dags"]
+pythonpath = ["airflow/dags", "."]
 
 [tool.ruff]
 line-length = 100
 
 [tool.ruff.lint.isort]
-known-first-party = ["pipeline_tasks"]
+known-first-party = ["pipeline_tasks", "audit_ledger", "tokenization", "security"]
 
 [tool.mypy]
 python_version = "3.14"

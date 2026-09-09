@@ -22,8 +22,11 @@ airflow/unittests.cfg
 # dbt (Data Build Tool) exclusions
 dbt_project/target/
 dbt_project/dbt_packages/
-dbt_project/package-lock.yml
 dbt_project/logs/
+# package-lock.yml is committed deliberately: without it, dbt can't reconcile
+# packages.yml's 2 top-level entries against dbt_expectations' transitive
+# dbt_date dependency, and refuses to run ("expects 2 package(s) ... but
+# found 3 ... installed").
 dbt_project/.user.yml
 
 # Local databases and caches

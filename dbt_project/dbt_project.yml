@@ -9,6 +9,24 @@ model-paths: ["models"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
 
+# In the container this points at packages baked into the image at build time,
+# outside the bind-mounted project dir, so a scheduled run never fetches from
+# the dbt hub. Locally it falls back to the usual in-project folder.
+packages-install-path: "{{ env_var('DBT_PACKAGES_PATH', 'dbt_packages') }}"
+
+# Real incident, unconfirmed cause: two genuine dbt_run processes against the
+# same deterministic input (same seeded ingestion, same batch_date) produced
+# different gold hashes five days apart. The leading theory is DuckDB's
+# internal SUM/AVG parallelism - float addition isn't associative, so the
+# order partial sums combine in isn't guaranteed stable run to run - but a
+# regression test reproducing it on this ~100-row dataset could not confirm
+# that: it passed 5/5 times even with this pragma removed, on an 8-core
+# machine. Pinning single-threaded aggregation is kept anyway as cheap,
+# harmless insurance against that theory being right at a larger data volume,
+# not as a proven fix. See tests/test_security_ledger.py.
+on-run-start:
+  - "PRAGMA threads=1"
+
 models:
   financial_data_platform:
     staging:

@@ -10,20 +10,27 @@
 x-airflow-common:
   &airflow-common
   build:
-    context: ./airflow
-  image: financial-data-orchestration/airflow:latest
+    # Repo root, so the build can reach dbt_project/packages.yml and bake the
+    # dbt packages into the image (see airflow/Dockerfile).
+    context: .
+    dockerfile: airflow/Dockerfile
+  image: financial-data-orchestration/airflow:0.1.0
   env_file:
     - .env
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-}
+    # `:?` rather than `:-`: every secret below fails the stack closed if it is
+    # missing from .env. A `:-default` would boot the stack with a signing key
+    # and admin password published in this repository, which is worse than no
+    # control at all because it looks like it worked. See security/preflight.py.
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres/${POSTGRES_DB:?set POSTGRES_DB in .env}
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:?generate one - see .env.example}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
-    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:-airflow_jwt_secret}
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW__API_AUTH__JWT_SECRET:?generate one - see .env.example}
     AIRFLOW__API_AUTH__JWT_ISSUER: ${AIRFLOW__API_AUTH__JWT_ISSUER:-airflow}
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
@@ -43,6 +50,16 @@ x-airflow-common:
     - ./airflow/plugins:/opt/airflow/plugins
     - ./dbt_project:/opt/airflow/dbt_project
     - ./data:/opt/airflow/data
+    # Read-only: the verifier must not be able to modify what it verifies.
+    - ./security:/opt/airflow/security:ro
+  # Group 0 is required by the upstream Airflow image, which expects a
+  # group-writable /opt/airflow; it is documented in docs/threat-model.md
+  # rather than papered over. no-new-privileges at least stops a compromised
+  # task from gaining more than the group it starts with. Capabilities are
+  # not dropped here because airflow-init chowns the bind mounts and needs
+  # CAP_CHOWN/CAP_FOWNER to do it.
+  security_opt:
+    - no-new-privileges:true
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -54,13 +71,13 @@ services:
     image: postgres:16
     container_name: airflow_postgres
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -147,7 +164,7 @@ services:
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
-      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:?set a real UI password in .env}
     user: "0:0"
 
   airflow-cli:
@@ -165,7 +182,7 @@ services:
       <<: *airflow-common-depends-on
 
   statsd-exporter:
-    image: prom/statsd-exporter:latest
+    image: prom/statsd-exporter:v0.28.0
     container_name: metrics_statsd_exporter
     command:
       - "--statsd.listen-udp=:8125"
@@ -176,32 +193,48 @@ services:
     volumes:
       - ./monitoring/statsd-mapping.yml:/etc/statsd/statsd-mapping.yml:ro
     ports:
-      - "9102:9102"
+      # Loopback-only: Airflow reaches this over the compose network, so it
+      # never needs to be published to the LAN. The metrics stream describes
+      # pipeline structure and volumes to anyone who can scrape it.
+      - "127.0.0.1:9102:9102"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.1.0
     container_name: metrics_prometheus
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
-      - "9090:9090"
+      # Loopback-only: Grafana queries it over the compose network.
+      - "127.0.0.1:9090:9090"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     depends_on:
       - statsd-exporter
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.5.1
     container_name: metrics_grafana
     depends_on:
       - prometheus
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?set a real Grafana password in .env}
     volumes:
-      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
-      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
 volumes:

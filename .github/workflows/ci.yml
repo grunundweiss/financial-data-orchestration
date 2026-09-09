@@ -1,0 +1,169 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint, types, and pipeline tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Type check (mypy)
+        run: mypy airflow/dags security tests
+
+      - name: Run tests (pipeline + security controls)
+        run: pytest -v
+
+  controls:
+    name: Control register is honest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+
+      # Fails if any control in security/controls.yaml has no test file behind
+      # it. A control with no test is a claim, and this job is what stops the
+      # register from drifting into one.
+      - name: Every control maps to a test that exists
+        run: python security/verify_controls.py
+
+  secrets:
+    name: No secrets in the repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  supply-chain:
+    name: Dependency and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[dev]" pip-audit bandit
+
+      - name: Known vulnerabilities in dependencies
+        run: pip-audit --strict
+
+      - name: Static analysis of first-party code
+        run: bandit -r airflow/dags security -ll
+
+  airflow-smoke-test:
+    name: Real Airflow DAG smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate a real .env and verify it passes preflight
+        run: |
+          python security/generate_env.py
+          python security/preflight.py
+
+      - name: Build the Airflow + dbt image
+        run: docker compose build airflow-apiserver
+
+      - name: Start the stack and wait for it to become healthy
+        run: docker compose up -d --wait postgres airflow-init airflow-apiserver airflow-scheduler airflow-dag-processor airflow-triggerer
+
+      - name: Assert the DAG imports without errors
+        run: |
+          OUTPUT=$(docker compose exec -T airflow-apiserver airflow dags list-import-errors)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "transaction_pipeline.py"; then
+            echo "transaction_pipeline.py failed to import" >&2
+            exit 1
+          fi
+
+      - name: Run the real DAG end-to-end
+        run: docker compose exec -T airflow-apiserver airflow dags test transaction_pipeline 2026-01-01
+
+      - name: Re-run the same logical date and assert it stayed idempotent
+        run: |
+          docker compose exec -T airflow-apiserver airflow dags test transaction_pipeline 2026-01-01
+          docker compose exec -T airflow-apiserver python -c "
+          import duckdb
+          conn = duckdb.connect('/opt/airflow/data/analytics_platform.db')
+          rows = conn.execute(\"SELECT COUNT(*) FROM bronze.raw_transactions WHERE batch_date='2026-01-01'\").fetchone()[0]
+          assert rows == 100, f'expected 100 rows after re-running the same date, got {rows}'
+          print(f'idempotent: {rows} rows after two runs of 2026-01-01')
+          "
+
+      - name: Audit chain must verify after a real run
+        run: |
+          docker compose exec -T airflow-apiserver python /opt/airflow/security/verify_chain.py \
+            --db /opt/airflow/data/analytics_platform.db
+
+      - name: A tampered warehouse must fail verification
+        run: |
+          docker compose exec -T airflow-apiserver python -c "
+          import duckdb
+          conn = duckdb.connect('/opt/airflow/data/analytics_platform.db')
+          conn.execute(\"UPDATE gold.fct_account_risk_metrics SET net_balance = net_balance + 999999\")
+          conn.close()
+          "
+          if docker compose exec -T airflow-apiserver python /opt/airflow/security/verify_chain.py \
+               --db /opt/airflow/data/analytics_platform.db; then
+            echo "verify-chain passed on a tampered warehouse - the control does nothing" >&2
+            exit 1
+          fi
+          echo "verify-chain correctly rejected the tampered warehouse"
+
+      - name: Assert Grafana provisioned its datasource
+        run: |
+          docker compose up -d --wait prometheus grafana statsd-exporter
+          GF_PASS=$(grep '^GF_SECURITY_ADMIN_PASSWORD=' .env | cut -d= -f2-)
+          for i in $(seq 1 30); do
+            if curl -sf -u "admin:${GF_PASS}" http://localhost:3000/api/datasources | grep -q '"type":"prometheus"'; then
+              echo "Grafana datasource provisioned"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Grafana never provisioned the Prometheus datasource" >&2
+          docker compose logs grafana
+          exit 1
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down -v

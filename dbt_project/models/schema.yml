@@ -20,8 +20,19 @@ models:
             min_value: 1
     columns:
       - name: transaction_id
+        meta:
+          classification: identifier
+          pii: false
         data_tests:
           - unique
+          - not_null
+      - name: account_id
+        description: "HMAC token, not the source account number. See vault.account_tokens."
+        meta:
+          classification: identifier
+          pii: true
+          tokenized: true
+        data_tests:
           - not_null
       - name: amount
         data_tests:
@@ -55,6 +66,10 @@ models:
             combination_of_columns: [account_id, batch_date]
     columns:
       - name: account_id
+        meta:
+          classification: identifier
+          pii: true
+          tokenized: true
         data_tests:
           - not_null
           - relationships:

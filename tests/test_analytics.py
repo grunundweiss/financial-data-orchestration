@@ -10,12 +10,6 @@ from pipeline_tasks import ingest_raw_transactions, run_dbt
 DBT_PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../dbt_project'))
 
 
-@pytest.fixture(scope="session", autouse=True)
-def dbt_packages():
-    """Fetches dbt_utils/dbt_expectations once per test session."""
-    run_dbt("deps", DBT_PROJECT_DIR, DBT_PROJECT_DIR)
-
-
 @pytest.fixture
 def isolated_db(tmp_path, monkeypatch):
     """Points dbt's profiles.yml at a fresh, per-test DuckDB file via DUCKDB_PATH."""

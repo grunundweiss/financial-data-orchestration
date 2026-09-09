@@ -1,0 +1,94 @@
+# security/controls.yaml
+#
+# The control register. Every control names the test that proves it, and
+# security/verify_controls.py fails CI if any of those tests is missing.
+# A control with no test is a claim, not a control.
+#
+# The `mapping` field is a REASONING EXERCISE, not a compliance claim. It
+# records which chapter of DORA (Regulation (EU) 2022/2554, Norwegian law via
+# DORA-loven of 27 May 2025) a control would sit under, to show the controls
+# were chosen against a real framework rather than invented. This repository
+# is not DORA-compliant and does not claim to be: it is a personal project
+# with synthetic data. Verify article ranges against the regulation text
+# before relying on them for anything.
+
+version: 1
+
+controls:
+  - id: C-01
+    control: Every column carrying an identifier is classified in schema.yml
+    owner: data-platform
+    proves: Test fails if any model column carrying an identifier lacks a classification tag
+    test: tests/test_security_classification.py
+    mapping: "DORA ch. II (ICT risk management framework)"
+    status: implemented
+
+  - id: C-02
+    control: Identifiers are tokenized before they reach Bronze
+    owner: data-platform
+    proves: Test scans silver and gold for raw ACC-NOR- patterns and fails on a hit
+    test: tests/test_security_classification.py
+    mapping: "DORA ch. II (ICT risk management framework)"
+    status: implemented
+
+  - id: C-03
+    control: No secret ships in the repository or resolves to a default
+    owner: platform
+    proves: Preflight rejects placeholder and weak values; compose has no ':-' fallback for secrets
+    test: tests/test_security_secrets.py
+    mapping: "DORA ch. II (ICT risk management framework)"
+    status: implemented
+
+  - id: C-04
+    control: Untrusted parameters cannot reach templated SQL
+    owner: data-platform
+    proves: Test submits a crafted batch_date and asserts the run is rejected and gold is unchanged
+    test: tests/test_security_input.py
+    mapping: "DORA ch. II (ICT risk management framework)"
+    status: implemented
+
+  - id: C-05
+    control: Every pipeline run appends a tamper-evident ledger entry
+    owner: data-platform
+    proves: verify-chain exits non-zero, naming the row, after a gold row is mutated
+    test: tests/test_security_ledger.py
+    mapping: "DORA ch. III (ICT-related incident management)"
+    status: implemented
+
+  - id: C-06
+    control: A failed quality gate raises an alert and leaves a durable record
+    owner: data-platform
+    proves: Test asserts the failure hook fires with run context and writes a ledger entry
+    test: tests/test_security_alerting.py
+    mapping: "DORA ch. III (ICT-related incident management)"
+    status: implemented
+
+  - id: C-07
+    control: Security gates run on every push and block merge
+    owner: platform
+    proves: The workflow itself, plus a test asserting each gate is wired into it
+    test: tests/test_security_ci.py
+    mapping: "DORA ch. IV (digital operational resilience testing)"
+    status: implemented
+
+  - id: C-08
+    control: Every dependency and image is pinned
+    owner: platform
+    proves: Test fails if any image uses a floating tag or any dbt package uses a range
+    test: tests/test_security_supply_chain.py
+    mapping: "DORA ch. V (managing ICT third-party risk)"
+    status: partial
+    notes: >-
+      Images are tag-pinned, not digest-pinned, and no SBOM is emitted yet.
+      Digest pinning needs a registry round-trip that has not been run.
+
+  - id: C-09
+    control: Nothing is fetched from the network at pipeline runtime
+    owner: platform
+    proves: dbt packages are installed into the image; the DAG has no deps task
+    test: tests/test_security_supply_chain.py
+    mapping: "DORA ch. V (managing ICT third-party risk)"
+    status: partial
+    notes: >-
+      dbt deps has moved into the image build, but this is not yet proven by a
+      smoke test running the DAG with egress blocked.
