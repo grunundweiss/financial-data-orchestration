@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/grunundweiss/financial-data-orchestration/actions/workflows/ci.yml/badge.svg)](https://github.com/grunundweiss/financial-data-orchestration/actions/workflows/ci.yml)
 
-A daily transaction pipeline: Airflow schedules it, dbt models it in DuckDB, dbt tests gate it, and Prometheus/Grafana show whether it's healthy. Runs are idempotent and backfillable — re-running any logical date reproduces that date's data exactly.
+A daily transaction pipeline: Airflow schedules it, dbt models it in DuckDB, dbt tests gate it, and Prometheus/Grafana show whether it's healthy. Runs are idempotent and backfillable, in which an action of re-running any logical date reproduces that date's data exactly.
 
 ## How it works
 
