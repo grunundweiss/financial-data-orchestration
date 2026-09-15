@@ -81,7 +81,9 @@ jobs:
       - run: pip install -e ".[dev]" pip-audit bandit
 
       - name: Known vulnerabilities in dependencies
-        run: pip-audit --strict
+        run: |
+          pip freeze --exclude-editable > "${RUNNER_TEMP}/audit-requirements.txt"
+          pip-audit --strict -r "${RUNNER_TEMP}/audit-requirements.txt"
 
       - name: Static analysis of first-party code
         run: bandit -r airflow/dags security -ll
