@@ -110,7 +110,7 @@ That only removes Airflow's own metadata database; `./data` and `./airflow/dags`
 
 ### Run the tests
 
-Ingests mock data into DuckDB and runs a real `dbt run` / `dbt test` against it. No Docker required:
+Ingests mock data into DuckDB and runs a real `dbt run` / `dbt test` against it.
 
 ```bash
 pytest -v
